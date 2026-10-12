@@ -179,7 +179,28 @@ namespace Docky.Shell
             }
             while (!introDone && sw.Elapsed.TotalSeconds < 12) await Task.Delay(100);
             CompositionTarget.Rendering -= Count;
-            Note($"intro: {frames} frames in {sw.Elapsed.TotalSeconds:0.0}s");
+            Note($"intro: {frames} frames in {sw.Elapsed.TotalSeconds:0.0}s (lite {app.Intro.Lite})");
+
+            // The same again without screenshots, to measure frame pacing.
+            frames = 0;
+            introDone = false;
+            CompositionTarget.Rendering += Count;
+            sw.Restart();
+            app.Intro.Play(Island, () => introDone = true);
+            while (!introDone && sw.Elapsed.TotalSeconds < 12) await Task.Delay(100);
+            CompositionTarget.Rendering -= Count;
+            Note($"intro (no captures): {frames} frames in {sw.Elapsed.TotalSeconds:0.0}s = {frames / sw.Elapsed.TotalSeconds:0} fps (lite {app.Intro.Lite})");
+
+            frames = 0;
+            app.Glow.Show();
+            await Task.Delay(1800);
+            CompositionTarget.Rendering += Count;
+            sw.Restart();
+            await Task.Delay(3000);
+            CompositionTarget.Rendering -= Count;
+            Note($"break glow: {frames / sw.Elapsed.TotalSeconds:0} frames/s while breathing");
+            app.Glow.Hide();
+            await Task.Delay(1400);
 
             // Settings
             foreach (var page in new[] { "General", "Island", "Now Playing", "Indicators", "Timers & Pomodoro", "Calendar", "About" })

@@ -17,7 +17,7 @@ namespace Docky.Island
     public static class Onboarding
     {
         public const int StepCount = 7;
-        private static readonly double[] Heights = { 214, 250, 236, 236, 262, 262, 262 };
+        private static readonly double[] Heights = { 214, 250, 282, 262, 320, 320, 262 };
         public static double Height(int step) => Heights[Math.Clamp(step, 0, Heights.Length - 1)];
         private static Settings S => SettingsStore.Current;
 

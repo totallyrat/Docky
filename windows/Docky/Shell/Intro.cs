@@ -124,6 +124,9 @@ namespace Docky.Shell
         private Brush shineBrush;
 
         public bool IsPlaying => clock != null;
+        /// <summary>Switched on automatically when frames run slow.</summary>
+        public bool Lite { get; private set; }
+        private int frameCount;
 
         public void Play(IslandWindow island, Action done)
         {
@@ -161,8 +164,9 @@ namespace Docky.Shell
                 if (edge)
                 {
                     pane.Vignette = pane.Window.AddScreenImage(vignette.Bitmap, W, H);
+                    pane.Vignette.CacheMode = new BitmapCache();
                     pane.Vignette.Opacity = 0;
-                    pane.Glow = new Canvas { Width = r.Width, Height = r.Height };
+                    pane.Glow = new Canvas { Width = r.Width, Height = r.Height, CacheMode = new BitmapCache() };
                     pane.Spins = new[]
                     {
                         pane.Window.AddMaskedConic(pane.Glow, conic, bloom.Bitmap, W, H, 0.8).spin,
@@ -179,6 +183,8 @@ namespace Docky.Shell
 
             clock = Stopwatch.StartNew();
             last = 0;
+            frameCount = 0;
+            Lite = false;
             CompositionTarget.Rendering += OnFrame;
         }
 
@@ -207,7 +213,11 @@ namespace Docky.Shell
             last = t;
             if (t >= EndTime) { Stop(); return; }
 
-            angle = t / 4.5 * 360 % 360;
+            // On a slow machine (no GPU, remote desktop…) hold the colours still and shed some
+            // sparks, so the moment stays smooth instead of stuttering.
+            frameCount++;
+            if (!Lite && t > 0.7 && t / frameCount > 0.03) Lite = true;
+            if (!Lite) angle = t / 4.5 * 360 % 360;
             double cx = W / 2, cy = H / 2;
 
             // Edge glow
@@ -234,7 +244,7 @@ namespace Docky.Shell
             headOpacity = Ease.Keys(t, new[] { 0, 0.06, 0.95, 1.15 }, new[] { 0.0, 1, 1, 0 });
             if (t > 0.05 && t < 0.05 + Ignite * 0.92)
             {
-                emitCarry += 170 * dt;
+                emitCarry += (Lite ? 70 : 170) * dt;
                 int n = (int)emitCarry;
                 emitCarry -= n;
                 foreach (bool left in new[] { true, false })
@@ -249,7 +259,7 @@ namespace Docky.Shell
             if (!burstDone && t >= Meet)
             {
                 burstDone = true;
-                for (int i = 0; i < 200; i++) sparks.Add(BurstSpark(new Point(cx, 4)));
+                for (int i = 0; i < (Lite ? 90 : 200); i++) sparks.Add(BurstSpark(new Point(cx, 4)));
             }
             for (int i = sparks.Count - 1; i >= 0; i--)
             {

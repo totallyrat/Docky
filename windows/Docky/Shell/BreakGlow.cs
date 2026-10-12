@@ -49,13 +49,18 @@ namespace Docky.Shell
                 // The warm wash: a full-screen image offset so this pane shows its slice.
                 var washImage = new Image { Source = wash.Bitmap, Width = W, Height = H, Stretch = Stretch.Fill };
                 RenderOptions.SetBitmapScalingMode(washImage, BitmapScalingMode.Linear);
-                var washHolder = new Canvas { Width = region.Width, Height = region.Height, ClipToBounds = true };
+                // Cached layers: breathing only re-composites them, it never redraws the glow.
+                var washHolder = new Canvas { Width = region.Width, Height = region.Height, ClipToBounds = true, CacheMode = new BitmapCache() };
                 Canvas.SetLeft(washImage, -region.X);
                 Canvas.SetTop(washImage, -region.Y);
                 washHolder.Children.Add(washImage);
                 breather.Children.Add(washHolder);
-                spins.Add(pane.AddMaskedConic(breather, conic, outer.Bitmap, W, H, 0.62).spin);
-                spins.Add(pane.AddMaskedConic(breather, conic, inner.Bitmap, W, H, 0.45).spin);
+                foreach (var (mask, opacity) in new[] { (outer, 0.62), (inner, 0.45) })
+                {
+                    var (shape, spin) = pane.AddMaskedConic(breather, conic, mask.Bitmap, W, H, opacity);
+                    shape.CacheMode = new BitmapCache();
+                    spins.Add(spin);
+                }
                 fader.Children.Add(breather);
                 pane.Root.Children.Add(fader);
                 panes.Add(pane);
@@ -66,9 +71,9 @@ namespace Docky.Shell
 
             // Start every pane's animations in the same tick so the seams never drift apart.
             var drift = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(24)) { RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(drift, 30);
+            Timeline.SetDesiredFrameRate(drift, 10); // 24 s per turn: 10 steps a second is imperceptible and cheap
             var breathe = new DoubleAnimation(0.72, 1, TimeSpan.FromSeconds(3.6)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = Anim.EaseInOut };
-            Timeline.SetDesiredFrameRate(breathe, 30);
+            Timeline.SetDesiredFrameRate(breathe, 24);
             var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(1.6)) { EasingFunction = Anim.EaseInOut };
             Timeline.SetDesiredFrameRate(fadeIn, 40);
             foreach (var s in spins) s.BeginAnimation(RotateTransform.AngleProperty, drift);
