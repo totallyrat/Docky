@@ -217,7 +217,6 @@ namespace Docky.Shell
         private Grid Toggle(string title, string detail, bool value, Action<Settings, bool> set)
         {
             var sw = new ToggleSwitch(value) { Tint = Theme.Blue };
-            sw.IsOn = value;
             sw.Toggled += on => Set(s => set(s, on));
             return Row(title, detail, sw);
         }

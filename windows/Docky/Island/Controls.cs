@@ -148,7 +148,8 @@ namespace Docky.Island
         private readonly TranslateTransform shift = new();
         private bool on;
         public event Action<bool> Toggled;
-        public Color Tint { get; set; } = Theme.Green;
+        private Color tint = Theme.Green;
+        public Color Tint { get => tint; set { tint = value; Apply(false); } }
 
         public ToggleSwitch(bool isOn)
         {

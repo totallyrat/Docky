@@ -58,7 +58,7 @@ namespace Docky.Shell
                 SettingsStore.Current.PlayIntro = false;
                 SettingsStore.Current.DidOnboard = true;
                 SettingsStore.Current.ReplaceVolumeOverlay = false;
-                Note($"screen {SystemParameters.PrimaryScreenWidth}x{SystemParameters.PrimaryScreenHeight} dpi {VisualTreeHelper.GetDpi(Island).DpiScaleX}");
+                Note($"screen {SystemParameters.PrimaryScreenWidth}x{SystemParameters.PrimaryScreenHeight} dpi {VisualTreeHelper.GetDpi(Island).DpiScaleX} render tier {RenderCapability.Tier >> 16}");
                 ShowBackdrop();
                 await Steps();
             }
@@ -197,7 +197,8 @@ namespace Docky.Shell
             await Task.Delay(settle);
             Rect? rect = full ? null : new Rect(Island.Left, Island.Top, IslandWindow.WinW, 360);
             Capture(Path.Combine(dir, name + ".png"), rect);
-            Note($"{name}: {Island.Presentation} {Island.TargetSize.Width:0}x{Island.TargetSize.Height:0}");
+            var hud = Island.Hud;
+            Note($"{name}: {Island.Presentation} {Island.TargetSize.Width:0}x{Island.TargetSize.Height:0}" + (hud != null ? $" hud={hud.Type} '{hud.Title}' '{hud.Detail}'" : ""));
         }
 
         private void Capture(string path, Rect? dips)
@@ -213,11 +214,21 @@ namespace Docky.Shell
                 if (r.Width <= 0 || r.Height <= 0) return;
                 using var bmp = new System.Drawing.Bitmap(r.Width, r.Height);
                 using (var g = System.Drawing.Graphics.FromImage(bmp))
-                    g.CopyFromScreen(r.X, r.Y, 0, 0, r.Size, System.Drawing.CopyPixelOperation.SourceCopy | System.Drawing.CopyPixelOperation.CaptureBlt);
+                {
+                    // CAPTUREBLT includes layered (transparent) windows like the island and glows.
+                    IntPtr dst = g.GetHdc(), src = GetDC(IntPtr.Zero);
+                    BitBlt(dst, 0, 0, r.Width, r.Height, src, r.X, r.Y, 0x00CC0020 | 0x40000000);
+                    ReleaseDC(IntPtr.Zero, src);
+                    g.ReleaseHdc(dst);
+                }
                 bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
             }
             catch (Exception ex) { Note("capture failed: " + ex.Message); }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, int rop);
 
         // MARK: Made-up content
 
