@@ -78,7 +78,7 @@ namespace Docky.Core
         public const string Drive = "", Bolt = "", Moon = "", Lock = "", Unlock = "";
         public const string Share = "", Delete = "", Repeat = "", Shield = "", Eye = "";
         public const string Focus = "", Coffee = "", Star = "", Video = "", Open = "";
-        public const string Download = "\uE896", Wave = "\uE8E1";
+        public const string Download = "\uE896", Wave = "\uE76E"; // Wave is a friendly smiley
         public const string Hand = "", Power = "", Skip = "", Sparkle = "", List = "";
 
         /// <summary>The speaker glyph for a volume level.</summary>
