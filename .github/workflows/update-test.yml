@@ -4,6 +4,11 @@ name: Update test
 # release, and checks the exe on disk was replaced by the release's version.
 on:
   workflow_dispatch:
+    inputs:
+      from:
+        description: 'Release to update from (e.g. v1.0.1). Empty = build this commit as 0.9.0.'
+        required: false
+        default: ''
 
 jobs:
   update:
@@ -14,7 +19,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Download the release to update from
+        if: inputs.from != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download ${{ inputs.from }} --pattern Docky.exe --dir old
       - name: Publish an old version
+        if: inputs.from == ''
         run: >
           dotnet publish windows/Docky/Docky.csproj -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
