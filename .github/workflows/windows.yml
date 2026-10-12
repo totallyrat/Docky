@@ -1,0 +1,53 @@
+name: Windows
+
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish Docky.exe
+        run: >
+          dotnet publish windows/Docky/Docky.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true -p:DebugType=none -o out
+
+      - name: Use a 1080p screen
+        shell: pwsh
+        continue-on-error: true
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      - name: Demo run (smoke test + screenshots)
+        shell: pwsh
+        run: |
+          $shots = Join-Path $pwd 'shots'
+          $p = Start-Process -FilePath 'out\Docky.exe' -ArgumentList '--demo', "`"$shots`"" -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(420000)) { $p.Kill(); Write-Host 'demo timed out' }
+          if (Test-Path "$shots\log.txt") { Get-Content "$shots\log.txt" }
+          $log = Join-Path $env:APPDATA 'Docky\errors.log'
+          if (Test-Path $log) { Copy-Item $log $shots; Get-Content $log }
+          if ($p.ExitCode -ne 0) { throw "demo exited with $($p.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Docky-Windows
+          path: out/Docky.exe
