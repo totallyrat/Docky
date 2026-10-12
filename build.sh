@@ -12,7 +12,7 @@ BUILD=$ROOT/build
 OBJ=$BUILD/obj
 ASSETS=$BUILD/assets
 PRODUCTS=$BUILD/Products
-VERSION=1.0.0
+VERSION=$(tr -d "[:space:]" < VERSION)
 BUILD_NUMBER=$(date +%Y%m%d%H%M)
 MIN_OS=14.0
 read -r -a ARCHS <<< "${ARCHS:-arm64 x86_64}"

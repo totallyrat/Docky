@@ -16,7 +16,7 @@ namespace Docky.Shell
     /// <summary>Things Settings can ask the app to do.</summary>
     public sealed class AppActions
     {
-        public Action PlayIntro, RunSetup, PreviewBreakGlow, Quit;
+        public Action PlayIntro, RunSetup, PreviewBreakGlow, CheckForUpdates, InstallUpdate, Quit;
     }
 
     /// <summary>Docky Settings: a dark window with a sidebar, opened from the island or the tray.</summary>
@@ -80,7 +80,8 @@ namespace Docky.Shell
             BuildNav();
             Show(page);
             SettingsStore.Changed += OnSettingsChanged;
-            Closed += (_, _) => SettingsStore.Changed -= OnSettingsChanged;
+            Updater.Shared.StatusChanged += OnUpdateStatus;
+            Closed += (_, _) => { SettingsStore.Changed -= OnSettingsChanged; Updater.Shared.StatusChanged -= OnUpdateStatus; };
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -98,6 +99,11 @@ namespace Docky.Shell
         }
 
         private bool editing;
+
+        private void OnUpdateStatus()
+        {
+            if (page == "General" || page == "About") Dispatcher.BeginInvoke(new Action(() => { if (!editing) Show(page, animate: false); }));
+        }
 
         private void Set(Action<Settings> change)
         {
@@ -255,6 +261,8 @@ namespace Docky.Shell
 
         private void General(StackPanel s)
         {
+            s.Children.Add(SectionTitle("Updates"));
+            s.Children.Add(UpdatesGroup());
             s.Children.Add(SectionTitle("Startup"));
             s.Children.Add(Group(
                 Toggle("Start Docky with Windows", null, S.LaunchAtStartup, (x, v) => { x.LaunchAtStartup = v; SettingsStore.ApplyStartup(); }),
@@ -406,14 +414,26 @@ namespace Docky.Shell
             catch { return url; }
         }
 
+        private Border UpdatesGroup()
+        {
+            var u = Updater.Shared;
+            FrameworkElement action = u.ReadyVersion != null
+                ? Button("Restart to Update", () => actions.InstallUpdate?.Invoke(), accent: true)
+                : Button(u.Checking ? "Checking…" : "Check Now", () => { if (!u.Checking) actions.CheckForUpdates?.Invoke(); });
+            string status = string.IsNullOrEmpty(u.Status) ? "Updates come from github.com/" + Updater.Repo + "." : u.Status;
+            return Group(
+                Row($"Docky {Updater.Current.ToString(3)}", status, action),
+                Toggle("Update Docky automatically", "Checks GitHub every few hours, downloads new versions in the background and installs them when Docky restarts.",
+                       S.AutoUpdate, (x, v) => x.AutoUpdate = v));
+        }
+
         private void About(StackPanel s)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 20, 0, 0) };
             row.Children.Add(new Image { Source = Onboarding.AppIcon(), Width = 84, Height = 84 });
             var texts = new StackPanel { Margin = new Thickness(18, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             texts.Children.Add(Theme.Text("Docky", 26, FontWeights.Bold, Brushes.White, true));
-            var version = typeof(SettingsWindow).Assembly.GetName().Version;
-            texts.Children.Add(Theme.Text($"Version {version?.ToString(3)} for Windows", 12.5, FontWeights.Normal, Theme.White(0.55)));
+            texts.Children.Add(Theme.Text($"Version {Updater.Current.ToString(3)} for Windows", 12.5, FontWeights.Normal, Theme.White(0.55)));
             texts.Children.Add(Theme.Text("A Dynamic Island for your PC.", 12.5, FontWeights.Normal, Theme.White(0.55)));
             row.Children.Add(texts);
             s.Children.Add(row);

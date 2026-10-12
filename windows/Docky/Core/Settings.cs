@@ -54,6 +54,7 @@ namespace Docky.Core
         public int SnoozeMinutes { get; set; } = 9;
 
         public bool DidOnboard { get; set; } = false;
+        public bool AutoUpdate { get; set; } = true;
 
         [JsonIgnore]
         public (double response, double damping) Spring => AnimationFeel switch

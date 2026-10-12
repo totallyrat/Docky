@@ -32,6 +32,8 @@ final class IslandStatus: ObservableObject {
     @Published private(set) var isRunning = false
     /// Permissions as the island (not this process) sees them: "ax", "cal", "focus" → 0 no, 1 yes, 2 denied.
     @Published private(set) var permissions: [String: Int] = [:]
+    /// The island's updater state, e.g. "checking" or "ready:1.0.2" (see DockyIPC.updateStatus).
+    @Published private(set) var update = "idle"
     private var permissionObserver: NSObjectProtocol?
     private var observers: [NSObjectProtocol] = []
     /// True when this settings UI is hosted inside the island app itself.
@@ -51,6 +53,12 @@ final class IslandStatus: ObservableObject {
             self?.permissions = result
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.send(.reportPermissions) }
+        observers.append(DistributedNotificationCenter.default().addObserver(
+            forName: DockyIPC.updateStatus, object: nil, queue: .main
+        ) { [weak self] note in
+            if let raw = note.object as? String { self?.update = raw }
+        })
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.send(.reportUpdate) }
         if inProcess {
             isRunning = true
             return

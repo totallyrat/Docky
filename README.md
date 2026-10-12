@@ -142,6 +142,12 @@ What it does, matching the Mac version:
 Windows limits: there's no island on the lock screen (apps can't draw there), Windows' own
 brightness pop-up can't be hidden, and calendars use iCal links rather than account sign-in.
 
+**Updates:** both versions check this repository's latest release every few hours (Settings →
+General → Updates), download new versions in the background and install them when Docky restarts
+— the island offers a Restart button. The Mac version only accepts an update signed with the same
+certificate as the installed copy. To publish a release, bump `VERSION`, commit, and run
+`NOTES="What's new" Tools/release.sh`.
+
 **Build:** `dotnet publish windows/Docky/Docky.csproj -c Release -r win-x64 --self-contained
 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`. It also builds on a Mac
 (`EnableWindowsTargeting`). The **Windows** GitHub Actions workflow publishes `Docky.exe` and runs

@@ -662,12 +662,13 @@ namespace Docky.Island
         // MARK: Notices, breaks, onboarding
 
         private string noticeKey;
-        public string NoticeTitle, NoticeMessage, NoticeAction;
+        public string NoticeTitle, NoticeMessage, NoticeAction, NoticeGlyph = G.Shield;
         private Action noticeCallback;
 
-        public void ShowNotice(string key, string title, string message, string action, Action onAction)
+        public void ShowNotice(string key, string title, string message, string action, Action onAction, string glyph = null)
         {
             noticeKey = key; NoticeTitle = title; NoticeMessage = message; NoticeAction = action; noticeCallback = onAction;
+            NoticeGlyph = glyph ?? G.Shield;
             Recompute();
         }
 

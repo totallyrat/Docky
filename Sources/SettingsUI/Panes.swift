@@ -14,6 +14,7 @@ struct GeneralPane: View {
     @AppStorage(K.style, store: store) private var style: IslandStyle = .automatic
     @AppStorage(K.use24Hour, store: store) private var use24Hour = false
     @AppStorage(K.playIntro, store: store) private var playIntro = true
+    @AppStorage(K.autoUpdate, store: store) private var autoUpdate = true
 
     var body: some View {
         Form {
@@ -61,6 +62,29 @@ struct GeneralPane: View {
             }
 
             Section {
+                LabeledContent {
+                    HStack(spacing: 10) {
+                        if status.update.hasPrefix("ready:") {
+                            Button("Restart to Update") { status.send(.installUpdate) }
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Check Now") { status.send(.checkForUpdates) }
+                                .disabled(!status.isRunning || status.update == "checking" || status.update.hasPrefix("downloading:"))
+                        }
+                    }
+                } label: {
+                    Text("Docky \(DockyRelease.currentVersion)")
+                    Text(updateText).foregroundStyle(status.update.hasPrefix("failed:") ? Color.orange : Color.secondary)
+                }
+                Toggle("Update Docky automatically", isOn: $autoUpdate)
+            } header: {
+                Text("Updates")
+            } footer: {
+                Text("Docky checks GitHub for new versions every few hours, downloads them in the background and installs them when it restarts.")
+                    .settingsFootnote()
+            }
+
+            Section {
                 Picker("Island style", selection: $style) {
                     ForEach(IslandStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -73,6 +97,19 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var updateText: String {
+        let u = status.update
+        func value(_ prefix: String) -> String { String(u.dropFirst(prefix.count)) }
+        if !status.isRunning { return "Open Docky to check for updates." }
+        if u == "checking" { return "Checking for updates…" }
+        if u.hasPrefix("latest:") { return "You're up to date." }
+        if u.hasPrefix("downloading:") { return "Downloading Docky \(value("downloading:"))…" }
+        if u.hasPrefix("ready:") { return "Docky \(value("ready:")) is ready to install." }
+        if u.hasPrefix("installing:") { return "Installing Docky \(value("installing:"))…" }
+        if u.hasPrefix("failed:") { return value("failed:") }
+        return "Updates come from github.com/\(DockyRelease.repo)."
     }
 
     private var islandIcon: NSImage {

@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsWindowController()
     private let intro = IntroController()
     private let breakGlow = BreakGlowController()
+    private let updater = Updater()
     /// Posts settingsChanged whenever the island itself changes a preference (e.g. during setup).
     private let settingsNotifier = SettingsNotifier()
     private var statusItem: NSStatusItem?
@@ -116,6 +117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.postPermissions() }
             .store(in: &cancellables)
 
+        // Updates from GitHub: downloaded quietly, then the island offers a restart.
+        updater.isEnabled = { [weak self] in self?.prefs.values.autoUpdate ?? true }
+        updater.onReady = { [weak self] version in self?.offerUpdate(version) }
+        updater.start()
+
         // First launch: walk through setup once the intro has played.
         if !UserDefaults.standard.bool(forKey: "didOnboard") {
 
@@ -133,6 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A downloaded update that wasn't installed yet goes in now, ready for next time.
+        if updater.hasStagedUpdate { updater.install(relaunch: false) }
         nowPlaying.stop()
         clock.save()
         postStatus("terminated")
@@ -159,7 +167,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .requestFocus: systemEvents.requestFocus()
         case .reportPermissions: postPermissions()
         case .showOnboarding: model.startOnboarding()
+        case .checkForUpdates: updater.check(userInitiated: true)
+        case .installUpdate: installUpdateNow()
+        case .reportUpdate: updater.postState()
         }
+    }
+
+    // MARK: Updates
+
+    private func offerUpdate(_ version: String) {
+        model.showNotice(
+            IslandModel.Notice(id: "update", symbol: "arrow.down.circle.fill",
+                               title: "Docky \(version) is ready",
+                               message: "Restart Docky to update. It only takes a second.",
+                               actionTitle: "Restart"),
+            action: { [weak self] in self?.installUpdateNow() })
+    }
+
+    private func installUpdateNow() {
+        guard updater.install(relaunch: true) else { return }
+        // Give the installer a moment to start waiting, then get out of its way.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
     }
 
     // MARK: Menu bar
@@ -189,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Docky Settings…", action: #selector(openSettingsAction), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Set Up Docky…", action: #selector(showOnboardingAction), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdatesAction), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Docky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -200,6 +229,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openClipboard() { model.expand(tab: .clipboard) }
     @objc private func openSettingsAction() { openSettings() }
     @objc private func showOnboardingAction() { model.startOnboarding() }
+    @objc private func checkForUpdatesAction() {
+        updater.check(userInitiated: true)
+        openSettings()
+    }
 
     func openSettings() {
         guard let controller else { return }

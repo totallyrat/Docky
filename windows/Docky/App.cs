@@ -34,6 +34,23 @@ namespace Docky
             DispatcherUnhandledException += (_, ex) => { Log(ex.Exception); ex.Handled = true; };
             AppDomain.CurrentDomain.UnhandledException += (_, ex) => Log(ex.ExceptionObject as Exception);
 
+            // CI: check GitHub, download the latest release and install it over this exe.
+            int selfTest = Array.IndexOf(args, "--update-selftest");
+            if (selfTest >= 0)
+            {
+                string log = Path.Combine(selfTest + 1 < args.Length ? args[selfTest + 1] : Environment.CurrentDirectory, "update.log");
+                void Write(string line) { try { File.AppendAllText(log, $"{DateTime.Now:HH:mm:ss} {line}\n"); } catch { } }
+                Write($"running {Updater.Current} from {Environment.ProcessPath}");
+                Updater.Shared.StatusChanged += () => Write("status: " + Updater.Shared.Status);
+                Updater.Shared.Ready += v => { Write($"ready {v}; installing: {Updater.Shared.Install(relaunch: true)}"); Shutdown(0); };
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    await Updater.Shared.Check();
+                    if (Updater.Shared.ReadyVersion == null) { Write("no update installed"); Shutdown(3); }
+                }));
+                return;
+            }
+
             int demo = Array.IndexOf(args, "--demo");
             if (demo >= 0)
             {
@@ -46,6 +63,11 @@ namespace Docky
 
             // One Docky at a time; launching it again opens Settings in the running one.
             instance = new Mutex(true, @"Local\Docky.Island", out bool first);
+            // Just updated: the old copy may take a moment to finish quitting.
+            if (!first && args.Contains("--updated"))
+            {
+                try { first = instance.WaitOne(TimeSpan.FromSeconds(10)); } catch (AbandonedMutexException) { first = true; }
+            }
             openSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Docky.OpenSettings");
             if (!first)
             {
@@ -61,8 +83,13 @@ namespace Docky
 
             StartServices(demo: false);
             CreateIsland();
-            tray = new Tray(() => ShowSettings(), RunSetup, PlayIntro, StartPomodoro, Quit);
+            tray = new Tray(() => ShowSettings(), RunSetup, PlayIntro, StartPomodoro, CheckForUpdates, Quit);
             SettingsStore.ApplyStartup();
+
+            // Updates from GitHub: downloaded quietly, then the island offers a restart.
+            Updater.Shared.Ready += version => Island.ShowNotice("update", $"Docky {version} is ready",
+                "Restart Docky to update. It only takes a second.", "Restart", InstallUpdateNow, G.Download);
+            Updater.Shared.Start();
 
             if (S.PlayIntro) Intro.Play(Island, AfterIntro);
             else AfterIntro();
@@ -142,6 +169,8 @@ namespace Docky
             PlayIntro = PlayIntro,
             RunSetup = RunSetup,
             PreviewBreakGlow = PreviewGlow,
+            CheckForUpdates = () => _ = Updater.Shared.Check(),
+            InstallUpdate = InstallUpdateNow,
             Quit = Quit,
         };
 
@@ -194,8 +223,25 @@ namespace Docky
             previewTimer.Start();
         }
 
+        private void CheckForUpdates()
+        {
+            ShowSettings("General");
+            _ = Updater.Shared.Check();
+        }
+
+        private void InstallUpdateNow()
+        {
+            ClockService.Shared.Save();
+            if (!Updater.Shared.Install(relaunch: true)) return;
+            KeyboardHook.Shared.Stop();
+            tray?.Dispose();
+            Shutdown();
+        }
+
         public void Quit()
         {
+            // A downloaded update that wasn't installed yet goes in now, ready for next time.
+            if (Updater.Shared.HasUpdate) Updater.Shared.Install(relaunch: false);
             ClockService.Shared.Save();
             KeyboardHook.Shared.Stop();
             tray?.Dispose();
@@ -222,6 +268,9 @@ namespace Docky
         [STAThread]
         public static int Main(string[] args)
         {
+            // Started from a freshly downloaded update: replace the old exe and restart it.
+            if (args.Length >= 4 && args[0] == "--apply-update")
+                return Updater.ApplyFromDownloaded(args[1], args[2], args[3]);
             var app = new App(args);
             return app.Run();
         }

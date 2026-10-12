@@ -9,7 +9,7 @@ namespace Docky.Shell
     {
         private readonly NotifyIcon icon;
 
-        public Tray(Action openSettings, Action runSetup, Action playIntro, Action startPomodoro, Action quit)
+        public Tray(Action openSettings, Action runSetup, Action playIntro, Action startPomodoro, Action checkForUpdates, Action quit)
         {
             var menu = new ContextMenuStrip { Renderer = new ToolStripProfessionalRenderer(new DarkColors()), ShowImageMargin = false };
             menu.ForeColor = Color.White;
@@ -18,6 +18,7 @@ namespace Docky.Shell
             Add("Docky Settings…", openSettings);
             Add("Start Pomodoro", startPomodoro);
             Add("Run Setup Again", runSetup);
+            Add("Check for Updates", checkForUpdates);
             Add("Play Intro", playIntro);
             menu.Items.Add(new ToolStripSeparator());
             Add("Quit Docky", quit);

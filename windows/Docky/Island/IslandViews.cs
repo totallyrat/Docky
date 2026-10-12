@@ -1189,7 +1189,7 @@ namespace Docky.Island
         }
 
         private static FrameworkElement Notice(IslandWindow w)
-            => Card(Theme.Blue, G.Shield, w.NoticeTitle, w.NoticeMessage, 13,
+            => Card(Theme.Blue, w.NoticeGlyph, w.NoticeTitle, w.NoticeMessage, 13,
                 new FrameworkElement[]
                 {
                     UI.Pill(w.NoticeAction, Theme.Blue, () => w.ResolveNotice(true), filled: true),

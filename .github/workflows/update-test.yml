@@ -1,0 +1,43 @@
+name: Update test
+
+# Builds an old-numbered copy of Docky (0.9.0), lets it update itself from the latest GitHub
+# release, and checks the exe on disk was replaced by the release's version.
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish an old version
+        run: >
+          dotnet publish windows/Docky/Docky.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:Version=0.9.0 -o old
+      - name: Update it from GitHub
+        shell: pwsh
+        run: |
+          $before = (Get-Item old\Docky.exe).VersionInfo.ProductVersion
+          Write-Host "before: $before"
+          $p = Start-Process -FilePath 'old\Docky.exe' -ArgumentList '--update-selftest', "`"$pwd`"" -PassThru
+          $null = $p.Handle
+          $p.WaitForExit(300000) | Out-Null
+          Write-Host "self-test exit: $($p.ExitCode)"
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            Start-Sleep -Seconds 2
+            $after = (Get-Item old\Docky.exe).VersionInfo.ProductVersion
+          } while ($after -eq $before -and (Get-Date) -lt $deadline)
+          Start-Sleep -Seconds 8
+          Get-Content update.log
+          Write-Host "after: $after"
+          $running = Get-Process Docky -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }
+          Write-Host "running: $running"
+          Get-Process Docky -ErrorAction SilentlyContinue | Stop-Process -Force
+          if ($after -eq $before) { throw 'the exe was not replaced' }
+          if (-not $running) { throw 'the updated Docky did not start' }

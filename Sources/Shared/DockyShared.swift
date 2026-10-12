@@ -14,10 +14,14 @@ enum DockyIPC {
     static let permissions = Notification.Name("com.totallyrat.docky.permissions")
     /// Posted by the island when it launches or quits so the settings window can refresh its status.
     static let islandStatus = Notification.Name("com.totallyrat.docky.status")
+    /// The updater's state, posted by the island: "checking", "latest:1.0.1", "downloading:1.0.2",
+    /// "ready:1.0.2", "installing:1.0.2" or "failed:<message>".
+    static let updateStatus = Notification.Name("com.totallyrat.docky.update")
 
     enum Command: String {
         case preview, quit, clearCompleted, testAlarm, openTimers, openReminders, playIntro, openClipboard
         case openCalendar, requestAccessibility, requestCalendar, requestFocus, reportPermissions, showOnboarding
+        case checkForUpdates, installUpdate, reportUpdate
     }
 }
 
@@ -107,6 +111,7 @@ struct DockyPrefs: Equatable {
         static let hudCharging = "hudCharging"
         static let replaceSystemHUD = "replaceSystemHUD"
         static let autoPauseOthers = "autoPauseOthers"
+        static let autoUpdate = "autoUpdate"
     }
 
     static let defaults: [String: Any] = [
@@ -148,6 +153,7 @@ struct DockyPrefs: Equatable {
         Key.hudCharging: true,
         Key.replaceSystemHUD: true,
         Key.autoPauseOthers: true,
+        Key.autoUpdate: true,
     ]
 
     static let store: UserDefaults = {
@@ -194,6 +200,7 @@ struct DockyPrefs: Equatable {
     var hudCharging: Bool
     var replaceSystemHUD: Bool
     var autoPauseOthers: Bool
+    var autoUpdate: Bool
 
     init(_ d: UserDefaults = DockyPrefs.store) {
         style = IslandStyle(rawValue: d.string(forKey: Key.style) ?? "") ?? .automatic
@@ -234,6 +241,7 @@ struct DockyPrefs: Equatable {
         hudCharging = d.bool(forKey: Key.hudCharging)
         replaceSystemHUD = d.bool(forKey: Key.replaceSystemHUD)
         autoPauseOthers = d.bool(forKey: Key.autoPauseOthers)
+        autoUpdate = d.bool(forKey: Key.autoUpdate)
     }
 }
 
@@ -302,5 +310,29 @@ enum MusicClassifier {
     static func isMusic(bundleID: String, duration: Double) -> Bool {
         if musicApps.contains(bundleID) { return true }
         return duration >= 60 && duration <= 300
+    }
+}
+
+/// Where new versions come from: the latest release of the public GitHub repository.
+enum DockyRelease {
+    static let repo = "totallyrat/Docky"
+    static let latestAPI = URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!
+    static let releasesPage = URL(string: "https://github.com/\(repo)/releases/latest")!
+
+    static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+
+    /// Compares dotted versions numerically ("1.0.10" is newer than "1.0.9"); a leading "v" is ignored.
+    static func isNewer(_ candidate: String, than current: String) -> Bool {
+        func parts(_ v: String) -> [Int] {
+            v.trimmingCharacters(in: CharacterSet(charactersIn: "vV ")).split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        }
+        let a = parts(candidate), b = parts(current)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0, y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
     }
 }

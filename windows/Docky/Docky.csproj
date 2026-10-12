@@ -13,7 +13,7 @@
     <RootNamespace>Docky</RootNamespace>
     <ApplicationIcon>Assets\Docky.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.0</Version>
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../VERSION').Trim())</Version>
     <Product>Docky</Product>
     <Description>A Dynamic Island for Windows</Description>
     <NoWarn>CA1416;CS4014;CS1998</NoWarn>
