@@ -1,6 +1,6 @@
 # Docky
 
-A Dynamic Island for the Mac. A black capsule lives at the top of your screen and morphs, with
+A Dynamic Island for the Mac (and Windows — see [Docky for Windows](#docky-for-windows)). A black capsule lives at the top of your screen and morphs, with
 iPhone-style spring animations, to show what's playing, running timers, alarms and reminders,
 and your Mac's lock state.
 
@@ -108,7 +108,42 @@ Sources/
   DockySettings/  the settings app
   MediaBridge/    Objective-C MediaRemote bridge hosted by perl
 Tools/            icon renderer and alert-sound synthesizer used by build.sh
+windows/Docky/    the Windows version (C#, WPF)
 ```
 
 Private APIs (MediaRemote, SkyLight) mean Docky can't ship on the Mac App Store, and a future
 macOS update could break Now Playing or the lock screen island.
+
+## Docky for Windows
+
+`windows/Docky` is a native Windows version (Windows 10 2004 or later, Windows 11) written in C#
+and WPF. It's one self-contained `Docky.exe`: no installer and no .NET install needed.
+
+**Get it:** download `Docky.exe` from the repository's Releases (or the *Docky-Windows* artifact
+of the latest **Windows** Actions run), put it anywhere (e.g. `Documents\Docky`) and open it.
+Windows SmartScreen warns about apps from unknown publishers the first time: click
+**More info → Run anyway**. Turn on *Start Docky with Windows* in setup or Settings.
+
+What it does, matching the Mac version:
+
+- The island at the top centre of the screen with the same spring morphs, hover growth, scroll /
+  click / drag-down to open, and drag inwards / outwards to tuck Now Playing away and back.
+- Now Playing for anything in the Windows media flyout (Spotify, browsers, Media Player…), with
+  artwork tint, scrubbing, "only music", hide title, track-change peek and auto-pause of other media.
+- Timers, Pomodoro (focus / break / long break / rounds, warm screen glow and "Time for a break"
+  until the break ends or the island is put away), reminders and alarms — all made in the island.
+- Calendar tab from iCal links (Google, Outlook, iCloud), Clipboard tab (drag files in and out,
+  Share zone), launch intro, and the setup walkthrough inside the island.
+- Volume, brightness, Do not disturb, Bluetooth, drives and charging indicators. With *Replace the
+  Windows volume pop-up* on, the volume keys show only in the island. Point at a level indicator
+  and scroll or drag to adjust it.
+- Docky Settings window and a tray icon (left-click for Settings, right-click for more).
+
+Windows limits: there's no island on the lock screen (apps can't draw there), Windows' own
+brightness pop-up can't be hidden, and calendars use iCal links rather than account sign-in.
+
+**Build:** `dotnet publish windows/Docky/Docky.csproj -c Release -r win-x64 --self-contained
+-p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`. It also builds on a Mac
+(`EnableWindowsTargeting`). The **Windows** GitHub Actions workflow publishes `Docky.exe` and runs
+`Docky.exe --demo <folder>`, which walks through every state with made-up data and saves a
+screenshot of each.

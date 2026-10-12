@@ -71,9 +71,9 @@ namespace Docky.Shell
 
             // Start every pane's animations in the same tick so the seams never drift apart.
             var drift = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(24)) { RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(drift, 10); // 24 s per turn: 10 steps a second is imperceptible and cheap
+            Timeline.SetDesiredFrameRate(drift, 12); // slow changes: a dozen steps a second is imperceptible and cheap
             var breathe = new DoubleAnimation(0.72, 1, TimeSpan.FromSeconds(3.6)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = Anim.EaseInOut };
-            Timeline.SetDesiredFrameRate(breathe, 24);
+            Timeline.SetDesiredFrameRate(breathe, 12);
             var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(1.6)) { EasingFunction = Anim.EaseInOut };
             Timeline.SetDesiredFrameRate(fadeIn, 40);
             foreach (var s in spins) s.BeginAnimation(RotateTransform.AngleProperty, drift);
