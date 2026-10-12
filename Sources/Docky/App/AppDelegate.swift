@@ -117,6 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.postPermissions() }
             .store(in: &cancellables)
 
+        // Auto-pause keeps getting undone: offer to switch it off (at most once a week).
+        nowPlaying.onAutoPauseOverridden = { [weak self] in self?.offerToStopAutoPause() }
+
         // Updates from GitHub: downloaded quietly, then the island offers a restart.
         updater.isEnabled = { [weak self] in self?.prefs.values.autoUpdate ?? true }
         updater.onReady = { [weak self] version in self?.offerUpdate(version) }
@@ -171,6 +174,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .installUpdate: installUpdateNow()
         case .reportUpdate: updater.postState()
         }
+    }
+
+    private func offerToStopAutoPause() {
+        let key = "autoPauseOfferDismissedAt"
+        if let last = UserDefaults.standard.object(forKey: key) as? Date, Date().timeIntervalSince(last) < 7 * 24 * 3600 { return }
+        guard prefs.values.autoPauseOthers, model.notice == nil else { return }
+        model.showNotice(
+            IslandModel.Notice(id: "autoPause", symbol: "hand.wave.fill",
+                               title: "Hey, it's me pausing your content",
+                               message: "Want me to turn that feature off for you?",
+                               actionTitle: "", toggleKey: DockyPrefs.Key.autoPauseOthers, toggleLabel: "Auto-pause"),
+            action: {},
+            dismiss: { UserDefaults.standard.set(Date(), forKey: key) })
     }
 
     // MARK: Updates

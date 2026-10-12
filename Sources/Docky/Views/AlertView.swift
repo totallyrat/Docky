@@ -168,6 +168,37 @@ struct RingingIcon: View {
 }
 
 /// A request card ("Docky needs Accessibility access…") with one action and a dismiss button.
+/// The switch on a notice card. Turning it off confirms and then closes the card.
+private struct NoticeToggle: View {
+    @EnvironmentObject var model: IslandModel
+    let label: String?
+    @AppStorage private var isOn: Bool
+
+    init(key: String, label: String?) {
+        self.label = label
+        _isOn = AppStorage(wrappedValue: true, key, store: DockyPrefs.store)
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            IslandToggle(isOn: $isOn.animation(.spring(response: 0.3, dampingFraction: 0.7)))
+            if let label {
+                Text(label)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .fixedSize()
+            }
+        }
+        .onChange(of: isOn) { _, on in
+            guard !on else { return }
+            model.updateNotice(message: "Done! I'll leave your media alone. You can turn it back on in Settings.")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                if model.notice?.toggleKey != nil { model.resolveNotice(acted: true) }
+            }
+        }
+    }
+}
+
 struct NoticeView: View {
     @EnvironmentObject var model: IslandModel
 
@@ -194,7 +225,11 @@ struct NoticeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 6)
-                CapsuleButton(title: notice.actionTitle, tint: tint, filled: true) { model.resolveNotice(acted: true) }
+                if let key = notice.toggleKey {
+                    NoticeToggle(key: key, label: notice.toggleLabel)
+                } else {
+                    CapsuleButton(title: notice.actionTitle, tint: tint, filled: true) { model.resolveNotice(acted: true) }
+                }
                 IconButton(symbol: "xmark", size: 12, weight: .bold, tint: .white.opacity(0.8), background: .white.opacity(0.14), diameter: 30) {
                     model.resolveNotice(acted: false)
                 }

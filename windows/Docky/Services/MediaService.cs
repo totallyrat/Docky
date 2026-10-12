@@ -83,6 +83,32 @@ namespace Docky.Services
             _ = RefreshAsync();
         }
 
+        /// <summary>Raised when someone has gone back to media Docky paused several times in a short while.</summary>
+        public event Action AutoPauseOverridden;
+        private readonly Dictionary<string, DateTime> pausedByUs = new(), overriddenAt = new();
+        private readonly List<DateTime> overrides = new();
+
+        /// <summary>True when <paramref name="app"/> is playing again shortly after Docky paused it:
+        /// the person wants it back, so leave everything playing this time, and keep count.</summary>
+        private bool IsOverride(string app)
+        {
+            var now = DateTime.Now;
+            if (overriddenAt.TryGetValue(app, out var at) && (now - at).TotalSeconds < 5) return true;
+            if (!pausedByUs.TryGetValue(app, out var pausedAt)) return false;
+            double since = (now - pausedAt).TotalSeconds;
+            if (since > 60 || since < 1.5) return false;
+            pausedByUs.Remove(app);
+            overriddenAt[app] = now;
+            overrides.RemoveAll(t => (now - t).TotalMinutes > 15);
+            overrides.Add(now);
+            if (overrides.Count >= 3)
+            {
+                overrides.Clear();
+                AutoPauseOverridden?.Invoke();
+            }
+            return true;
+        }
+
         /// <summary>One thing plays at a time: when a session starts playing, pause the others.</summary>
         private void CheckAutoPause(GlobalSystemMediaTransportControlsSession started)
         {
@@ -94,11 +120,15 @@ namespace Docky.Services
                 if (!SettingsStore.Current.AutoPauseOthers) return;
                 if (status != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ||
                     previous == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing) return;
+                if (IsOverride(started.SourceAppUserModelId)) return;
                 foreach (var other in manager.GetSessions())
                 {
                     if (other.SourceAppUserModelId == started.SourceAppUserModelId) continue;
                     if (other.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                    {
+                        pausedByUs[other.SourceAppUserModelId] = DateTime.Now;
                         _ = other.TryPauseAsync();
+                    }
                 }
             }
             catch { }

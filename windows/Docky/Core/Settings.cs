@@ -55,6 +55,7 @@ namespace Docky.Core
 
         public bool DidOnboard { get; set; } = false;
         public bool AutoUpdate { get; set; } = true;
+        public DateTime? AutoPauseOfferDismissedAt { get; set; }
 
         [JsonIgnore]
         public (double response, double damping) Spring => AnimationFeel switch

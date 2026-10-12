@@ -124,6 +124,12 @@ final class MediaArbiter {
     /// Apps seen in Now Playing this session count as media apps too.
     private var seenPlayers: Set<String> = []
     private var lastPause: [String: Date] = [:]
+    /// When Docky paused each app, so a quick resume can be recognised as "no thanks".
+    private var pausedByUs: [String: Date] = [:]
+    private var overriddenAt: [String: Date] = [:]
+    private var overrides: [Date] = []
+    /// Called when someone has gone back to media Docky paused several times in a short while.
+    var onRepeatedOverrides: (() -> Void)?
 
     static let knownPlayers: Set<String> = MusicClassifier.musicApps.union([
         "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.canary",
@@ -170,9 +176,32 @@ final class MediaArbiter {
         debugLog("started \(app) player=\(isPlayer(app)) outputting=\(audio.outputting.keys.sorted())")
         #endif
         guard isEnabled(), isPlayer(app) else { return }
+        if isOverride(app) { return }
         for other in audio.outputting.keys where other != app && isPlayer(other) {
             pause(other)
         }
+    }
+
+    /// Now Playing moved from one app to another while both were playing.
+    func handover(from previous: String, to next: String) {
+        guard isEnabled(), !isOverride(next) else { return }
+        pause(previous)
+    }
+
+    /// True when `app` is playing again shortly after Docky paused it: the person wants it back,
+    /// so leave everything playing this time, and keep count.
+    private func isOverride(_ app: String) -> Bool {
+        let now = Date()
+        if let at = overriddenAt[app], now.timeIntervalSince(at) < 5 { return true }
+        guard let pausedAt = pausedByUs[app], now.timeIntervalSince(pausedAt) < 60, now.timeIntervalSince(pausedAt) > 1.5 else { return false }
+        pausedByUs[app] = nil
+        overriddenAt[app] = now
+        overrides = overrides.filter { now.timeIntervalSince($0) < 15 * 60 } + [now]
+        if overrides.count >= 3 {
+            overrides.removeAll()
+            onRepeatedOverrides?()
+        }
+        return true
     }
 
     /// Pauses one app. Also called when Now Playing hands over from one app to another.
@@ -180,6 +209,7 @@ final class MediaArbiter {
         guard isEnabled(), !app.isEmpty else { return }
         if let last = lastPause[app], Date().timeIntervalSince(last) < 1 { return }
         lastPause[app] = Date()
+        pausedByUs[app] = Date()
         #if DOCKY_DEBUG
         debugLog("pause \(app)")
         if ProcessInfo.processInfo.environment["DOCKY_ARBITER_DRYRUN"] != nil { return }

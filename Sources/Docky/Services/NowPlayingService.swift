@@ -43,6 +43,11 @@ final class NowPlayingService: ObservableObject {
     var filter: (NowPlayingInfo) -> Bool = { _ in true }
     /// When true, starting playback in one app pauses the app that was playing before.
     var pauseOthersWhenSwitching: () -> Bool = { false }
+    /// Someone keeps resuming what auto-pause stopped (see MediaArbiter).
+    var onAutoPauseOverridden: (() -> Void)? {
+        get { arbiter.onRepeatedOverrides }
+        set { arbiter.onRepeatedOverrides = newValue }
+    }
     private lazy var arbiter = MediaArbiter(
         isEnabled: { [weak self] in self?.pauseOthersWhenSwitching() ?? false },
         send: { [weak self] command in self?.send(command) })
@@ -191,7 +196,7 @@ final class NowPlayingService: ObservableObject {
             // just like iPhone hands audio from one app to the next.
             if let previous, previous.isPlaying, next.isPlaying, !previous.bundleID.isEmpty,
                !next.bundleID.isEmpty, pauseOthersWhenSwitching() {
-                arbiter.pause(previous.bundleID)
+                arbiter.handover(from: previous.bundleID, to: next.bundleID)
             }
         }
 

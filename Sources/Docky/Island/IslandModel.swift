@@ -122,6 +122,9 @@ final class IslandModel: ObservableObject {
         var title: String
         var message: String
         var actionTitle: String
+        /// When set, the card shows a switch for this preference instead of a button.
+        var toggleKey: String? = nil
+        var toggleLabel: String? = nil
     }
     @Published private(set) var notice: Notice?
     private var noticeAction: (() -> Void)?
@@ -376,7 +379,8 @@ final class IslandModel: ObservableObject {
         case .breakTime:
             size = notch ? CGSize(width: max(m.notchWidth + 220, 460), height: H + 96) : CGSize(width: 440, height: 104)
         case .notice:
-            size = notch ? CGSize(width: max(m.notchWidth + 220, 460), height: H + 96) : CGSize(width: 440, height: 104)
+            let wide: CGFloat = notice?.toggleKey != nil ? 40 : 0
+            size = notch ? CGSize(width: max(m.notchWidth + 220, 460) + wide, height: H + 96) : CGSize(width: 440 + wide, height: 104)
         case .alert:
             size = notch ? CGSize(width: max(m.notchWidth + 200, 440), height: H + 86) : FloatingGeometry.alertSize
         }
@@ -604,6 +608,13 @@ final class IslandModel: ObservableObject {
         noticeDismiss = nil
         notice = nil
         recompute()
+    }
+
+    /// Changes the text of the notice that's showing (e.g. to confirm a choice).
+    func updateNotice(message: String) {
+        guard var n = notice else { return }
+        n.message = message
+        notice = n
     }
 
     func resolveNotice(acted: Bool) {

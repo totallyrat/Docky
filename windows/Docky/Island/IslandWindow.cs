@@ -186,8 +186,15 @@ namespace Docky.Island
                 }
             }
             Recompute();
+            // Timeline updates arrive every few seconds; only rebuild for things the view shows
+            // statically (track, play state, artwork), so scrubbing and the marquee aren't interrupted.
+            var c = m.Current;
+            string signature = c == null ? "" : $"{c.TrackKey}|{c.IsPlaying}|{c.Artwork?.GetHashCode()}|{c.Duration:0}";
+            if (signature == lastMediaSignature) return;
+            lastMediaSignature = signature;
             if (Expanded && Tab == Tab.NowPlaying) RefreshContent();
         }
+        private string lastMediaSignature;
 
         // MARK: State
 
@@ -228,7 +235,13 @@ namespace Docky.Island
             return S.HideWhenIdle && !Hovering && !IntroHidden && !IntroActive ? Pres.Hidden : Pres.Idle;
         }
 
-        private string ContentKey(Pres p) => p switch
+        /// <summary>Settings that change how content is laid out. Part of the content key so the
+        /// view is rebuilt (e.g. hiding the song title used to leave the old, wider view cropped).</summary>
+        private static string LayoutKey => $"|{S.ShowTitle}|{S.IslandScale:0.00}|{S.TintFromArtwork}|{S.Use24Hour}|{S.ShowCalendar}|{S.ShowTimerBubble}";
+
+        private string ContentKey(Pres p) => p == Pres.Onboarding ? BaseKey(p) : BaseKey(p) + LayoutKey;
+
+        private string BaseKey(Pres p) => p switch
         {
             Pres.Expanded => "expanded-" + Tab + "-" + TimersMode + "-" + RemindersMode,
             Pres.Hud => "hud-" + hud?.Type + (hud?.Level == null ? hud?.Title + hud?.Detail : ""),
@@ -256,7 +269,7 @@ namespace Docky.Island
                 case Pres.Peek: size = new Size(350, 78); break;
                 case Pres.Expanded: size = new Size(440, IslandViews.HeaderHeight + IslandViews.ContentHeight(this) + 20); break;
                 case Pres.Alert: size = new Size(410, 98); break;
-                case Pres.Notice:
+                case Pres.Notice: size = new Size(NoticeToggleLabel != null ? 480 : 440, 104); break;
                 case Pres.Break: size = new Size(440, 104); break;
                 case Pres.Onboarding: size = new Size(580, Onboarding.Height(OnboardingStep ?? 0)); break;
                 case Pres.OnboardingDemo: size = new Size((S.ShowTitle ? 236 : 180) * s, H); break;
@@ -293,19 +306,39 @@ namespace Docky.Island
             if (snap) { sw.Snap(size.Width); sh.Snap(size.Height); sr.Snap(radius); }
 
             string key = ContentKey(p);
-            if (key != currentKey) Swap(IslandViews.Build(this, p), key);
+            if (key != currentKey)
+            {
+                // Switching tabs keeps the tab bar in place and only changes what's below it.
+                if (p == Pres.Expanded && Presentation == Pres.Expanded && current is IslandViews.ExpandedView ev && currentKey?.StartsWith("expanded-") == true)
+                {
+                    currentKey = key;
+                    IslandViews.UpdateExpanded(ev, this, animate: true);
+                }
+                else Swap(IslandViews.Build(this, p), key);
+            }
 
             outsideTimer.IsEnabled = Expanded;
             StartRendering();
         }
 
         /// <summary>Rebuild the current content in place (e.g. a list changed).</summary>
-        public void Rebuild() { currentKey = null; Recompute(); }
+        public void Rebuild()
+        {
+            if (Presentation == Pres.Expanded && current is IslandViews.ExpandedView ev)
+            {
+                Recompute();
+                IslandViews.UpdateExpanded(ev, this, animate: true);
+                return;
+            }
+            currentKey = null;
+            Recompute();
+        }
 
         /// <summary>Refresh without the swap animation (live data inside the same view).</summary>
         public void RefreshContent()
         {
             if (current == null) return;
+            if (current is IslandViews.ExpandedView ev) { IslandViews.UpdateExpanded(ev, this, animate: false); return; }
             var next = IslandViews.Build(this, Presentation);
             host.Children.Remove(current);
             Prepare(next);
@@ -501,9 +534,10 @@ namespace Docky.Island
 
         private void OnDown(object sender, MouseButtonEventArgs e)
         {
+            // Don't capture yet: capturing here would steal the click from tabs, switches and
+            // buttons inside the island. The mouse is only taken once a drag really starts.
             downAt = e.GetPosition(shape);
             dragging = false;
-            shape.CaptureMouse();
         }
 
         private void OnMove(object sender, MouseEventArgs e)
@@ -512,6 +546,7 @@ namespace Docky.Island
             var p = e.GetPosition(shape);
             var d = p - start;
             if (!dragging && d.Length < 8) return;
+            if (!dragging) shape.CaptureMouse();
             dragging = true;
             hoverTimer.Stop();
             double side = start.X >= shape.ActualWidth / 2 ? 1 : -1;
@@ -526,7 +561,7 @@ namespace Docky.Island
 
         private void OnUp(object sender, MouseButtonEventArgs e)
         {
-            shape.ReleaseMouseCapture();
+            if (shape.IsMouseCaptured) shape.ReleaseMouseCapture();
             if (downAt is not Point start) return;
             downAt = null;
             var d = e.GetPosition(shape) - start;
@@ -541,6 +576,7 @@ namespace Docky.Island
             double inward = Math.Max(-outward, -d.Y);
             SetDragStretch(0);
             if (Presentation == Pres.Break && d.Y < -24) { DismissBreak(); return; }
+            if (Expanded && !Editing && d.Y < -40 && Math.Abs(d.X) < -d.Y) { Collapse(); return; }
             if (Presentation == Pres.Music && inward >= 40) { Retract(); return; }
             if (CanRestoreMusic && outward >= 40) { Restore(); return; }
             if (d.Y > 34 && Math.Abs(d.X) < d.Y && CanExpand && !Expanded) Expand();
@@ -569,13 +605,8 @@ namespace Docky.Island
                 e.Handled = true;
                 return;
             }
-            if (Expanded)
-            {
-                // Lists inside the island scroll normally.
-                if (e.OriginalSource is DependencyObject src && FindScroll(src) != null) return;
-                e.Handled = true;
-                return;
-            }
+            // Inside the open island (or setup), scrolling belongs to lists and number dials.
+            if (Expanded || Presentation is Pres.Onboarding or Pres.Alert or Pres.Notice) return;
             e.Handled = true;
             if ((DateTime.Now - lastWheel).TotalMilliseconds > 400) wheelAccumulator = 0;
             lastWheel = DateTime.Now;
@@ -663,21 +694,49 @@ namespace Docky.Island
 
         private string noticeKey;
         public string NoticeTitle, NoticeMessage, NoticeAction, NoticeGlyph = G.Shield;
+        /// <summary>When set, the notice shows a switch (with this label) instead of a button.</summary>
+        public string NoticeToggleLabel;
+        public Func<bool> NoticeToggleValue;
+        public Action<bool> NoticeToggled;
+        private Action noticeDismissed;
         private Action noticeCallback;
 
         public void ShowNotice(string key, string title, string message, string action, Action onAction, string glyph = null)
         {
             noticeKey = key; NoticeTitle = title; NoticeMessage = message; NoticeAction = action; noticeCallback = onAction;
             NoticeGlyph = glyph ?? G.Shield;
+            NoticeToggleLabel = null; NoticeToggleValue = null; NoticeToggled = null; noticeDismissed = null;
             Recompute();
         }
+
+        /// <summary>A notice with a switch, e.g. "Want me to turn that feature off for you?"</summary>
+        public void ShowToggleNotice(string key, string title, string message, string toggleLabel, Func<bool> value, Action<bool> toggled, string glyph, Action dismissed)
+        {
+            ShowNotice(key, title, message, "", null, glyph);
+            NoticeToggleLabel = toggleLabel;
+            NoticeToggleValue = value;
+            NoticeToggled = toggled;
+            noticeDismissed = dismissed;
+            currentKey = null;
+            Recompute();
+        }
+
+        public void UpdateNoticeMessage(string message)
+        {
+            NoticeMessage = message;
+            if (Presentation == Pres.Notice) RefreshContent();
+        }
+
+        public bool HasNotice => noticeKey != null;
 
         public void ResolveNotice(bool acted)
         {
             var cb = noticeCallback;
-            noticeKey = null; noticeCallback = null;
+            var dismissed = noticeDismissed;
+            noticeKey = null; noticeCallback = null; noticeDismissed = null; NoticeToggled = null;
             Recompute();
             if (acted) cb?.Invoke();
+            else dismissed?.Invoke();
         }
 
         private void StartBreak()

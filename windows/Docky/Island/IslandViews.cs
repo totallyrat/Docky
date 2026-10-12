@@ -280,23 +280,68 @@ namespace Docky.Island
 
         // MARK: Expanded
 
+        /// <summary>The open island: a tab bar that stays put, and the current tab below it.</summary>
+        public sealed class ExpandedView : DockPanel
+        {
+            public readonly Grid BodyHost = new() { Margin = new Thickness(0, 14, 0, 0) };
+            public FrameworkElement HeaderView, Body;
+        }
+
         private static FrameworkElement Expanded(IslandWindow w)
         {
-            var stack = new DockPanel { Margin = new Thickness(Side, 16, Side, 20), LastChildFill = true };
+            var view = new ExpandedView { Margin = new Thickness(Side, 16, Side, 20), LastChildFill = true };
+            view.HeaderView = Header(w);
+            DockPanel.SetDock(view.HeaderView, Dock.Top);
+            view.Children.Add(view.HeaderView);
+            view.Body = TabBody(w);
+            view.BodyHost.Children.Add(view.Body);
+            view.Children.Add(view.BodyHost);
+            return view;
+        }
+
+        private static FrameworkElement TabBody(IslandWindow w) => w.Tab switch
+        {
+            Tab.NowPlaying => NowPlayingTab(w),
+            Tab.Timers => TimersTab(w),
+            Tab.Reminders => RemindersTab(w),
+            Tab.Calendar => CalendarTab(w),
+            _ => ClipboardTab(w),
+        };
+
+        /// <summary>Rebuilds the open island in place: the tab bar's highlight slides to the new
+        /// tab, and the old tab's content fades out as the new one rises in.</summary>
+        public static void UpdateExpanded(ExpandedView view, IslandWindow w, bool animate)
+        {
+            var size = w.TargetSize;
+            var m = view.Margin;
+            view.Width = Math.Max(0, size.Width - m.Left - m.Right);
+            view.Height = Math.Max(0, size.Height - m.Top - m.Bottom);
+
             var header = Header(w);
             DockPanel.SetDock(header, Dock.Top);
-            stack.Children.Add(header);
-            FrameworkElement content = w.Tab switch
+            view.Children.Remove(view.HeaderView);
+            view.Children.Insert(0, header);
+            view.HeaderView = header;
+
+            var old = view.Body;
+            var next = TabBody(w);
+            view.Body = next;
+            next.VerticalAlignment = VerticalAlignment.Top;
+            view.BodyHost.Children.Add(next);
+            if (old == null) return;
+            if (!animate)
             {
-                Tab.NowPlaying => NowPlayingTab(w),
-                Tab.Timers => TimersTab(w),
-                Tab.Reminders => RemindersTab(w),
-                Tab.Calendar => CalendarTab(w),
-                _ => ClipboardTab(w),
-            };
-            content.Margin = new Thickness(0, 14, 0, 0);
-            stack.Children.Add(content);
-            return stack;
+                view.BodyHost.Children.Remove(old);
+                return;
+            }
+            old.IsHitTestVisible = false;
+            old.VerticalAlignment = VerticalAlignment.Top;
+            Anim.To(old, UIElement.OpacityProperty, 0, 120, done: () => view.BodyHost.Children.Remove(old));
+            var rise = new TranslateTransform(0, 8);
+            next.RenderTransform = rise;
+            next.Opacity = 0;
+            Anim.To(next, UIElement.OpacityProperty, 1, 240, delayMs: 60);
+            Anim.To(rise, TranslateTransform.YProperty, 0, 320, new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }, 60);
         }
 
         private static FrameworkElement Header(IslandWindow w)
@@ -1122,7 +1167,7 @@ namespace Docky.Island
 
         // MARK: Cards
 
-        private static FrameworkElement Card(Color tint, string glyph, string caption, string headline, double headlineSize, IEnumerable<FrameworkElement> actions, bool ring = false)
+        private static FrameworkElement Card(Color tint, string glyph, string caption, string headline, double headlineSize, IEnumerable<FrameworkElement> actions, bool ring = false, bool wrap = false)
         {
             var g = new Grid { Margin = new Thickness(24, 0, 24, 0) };
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1141,7 +1186,9 @@ namespace Docky.Island
             g.Children.Add(circle);
             var texts = new StackPanel { Margin = new Thickness(14, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
             texts.Children.Add(Theme.Text(caption, 12, FontWeights.SemiBold, Theme.Brush(tint)));
-            texts.Children.Add(Theme.Text(headline, headlineSize, FontWeights.SemiBold, Brushes.White, true));
+            var head = Theme.Text(headline, headlineSize, FontWeights.SemiBold, Brushes.White, true);
+            if (wrap) { head.TextWrapping = TextWrapping.Wrap; head.TextTrimming = TextTrimming.CharacterEllipsis; head.MaxHeight = headlineSize * 2.8; }
+            texts.Children.Add(head);
             Grid.SetColumn(texts, 1);
             g.Children.Add(texts);
             var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
@@ -1189,12 +1236,25 @@ namespace Docky.Island
         }
 
         private static FrameworkElement Notice(IslandWindow w)
-            => Card(Theme.Blue, w.NoticeGlyph, w.NoticeTitle, w.NoticeMessage, 13,
-                new FrameworkElement[]
-                {
-                    UI.Pill(w.NoticeAction, Theme.Blue, () => w.ResolveNotice(true), filled: true),
-                    UI.IconButton(G.Close, 11, Theme.White(0.8), () => w.ResolveNotice(false), Theme.White(0.14), 30),
-                });
+        {
+            FrameworkElement primary;
+            if (w.NoticeToggleLabel != null)
+            {
+                var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                var sw = new ToggleSwitch(w.NoticeToggleValue?.Invoke() ?? true) { HorizontalAlignment = HorizontalAlignment.Center };
+                sw.Toggled += on => w.NoticeToggled?.Invoke(on);
+                stack.Children.Add(sw);
+                var label = Theme.Text(w.NoticeToggleLabel, 9.5, FontWeights.SemiBold, Theme.White(0.45));
+                label.HorizontalAlignment = HorizontalAlignment.Center;
+                label.Margin = new Thickness(0, 4, 0, 0);
+                stack.Children.Add(label);
+                primary = stack;
+            }
+            else primary = UI.Pill(w.NoticeAction, Theme.Blue, () => w.ResolveNotice(true), filled: true);
+            return Card(Theme.Blue, w.NoticeGlyph, w.NoticeTitle, w.NoticeMessage, 13,
+                new[] { primary, UI.IconButton(G.Close, 11, Theme.White(0.8), () => w.ResolveNotice(false), Theme.White(0.14), 30, "Not now") },
+                wrap: true);
+        }
 
         private static FrameworkElement BreakCard(IslandWindow w)
         {

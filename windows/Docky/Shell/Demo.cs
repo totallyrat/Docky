@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -71,6 +72,7 @@ namespace Docky.Shell
         {
             var clock = ClockService.Shared;
             await Shot("01-idle");
+            await Interactions();
 
             MediaService.Shared.Inject(Track());
             await Shot("02-music");
@@ -226,6 +228,100 @@ namespace Docky.Shell
             }
             Note("done");
         }
+
+        // MARK: Real clicks
+
+        /// <summary>Clicks things with the real mouse, like a person would, and checks they react.</summary>
+        private async Task Interactions()
+        {
+            var S = SettingsStore.Current;
+            MediaService.Shared.Inject(Track());
+            await Task.Delay(800);
+
+            // Click the island open, then switch tabs.
+            await Click(Island.Content as FrameworkElement, new Point(IslandWindow.WinW / 2, 24));
+            Expect(Island.Expanded, "clicking the island opens it");
+            await Click(Find(e => e.ToolTip as string == "Timers & Pomodoro"));
+            Expect(Island.Tab == Tab.Timers, "clicking the Timers tab switches to it");
+            await Shot("05a-clicked-timers-tab", settle: 500);
+            await Click(Find(e => e is TextBlock t && t.Text == "Pomodoro"));
+            Expect(Island.TimersMode == "pomodoro", "clicking Pomodoro switches the timer mode");
+            await Click(Find(e => e.ToolTip as string == "Reminders & Alarms"));
+            Expect(Island.Tab == Tab.Reminders, "clicking the Reminders tab switches to it");
+            await Click(Find(e => e.ToolTip as string == "Clipboard"));
+            Expect(Island.Tab == Tab.Clipboard, "clicking the Clipboard tab switches to it");
+            await Click(Find(e => e.ToolTip as string == "Now Playing"));
+            Expect(Island.Tab == Tab.NowPlaying, "clicking the Now Playing tab switches to it");
+            Island.Collapse();
+            await Task.Delay(700);
+
+            // Hiding the song title keeps the artwork and the waveform.
+            SettingsStore.Update(x => x.ShowTitle = false);
+            await Shot("05b-music-without-title", settle: 900);
+            Expect(Find(e => e is Equalizer) != null && Find(e => e is Marquee) == null, "without the title the island shows artwork and waveform");
+            SettingsStore.Update(x => x.ShowTitle = true);
+            await Task.Delay(700);
+
+            // Flip a switch in setup.
+            Island.StartOnboarding();
+            await Task.Delay(700);
+            Island.OnboardingGo(1); Island.OnboardingGo(1); Island.OnboardingGo(1);
+            await Task.Delay(900);
+            bool before = S.ScrollToOpen;
+            await Click(Find(e => e is ToggleSwitch));
+            Expect(S.ScrollToOpen != before, "clicking a switch in setup changes the setting");
+            await Shot("05c-setup-switch-clicked", settle: 400);
+            await Click(Find(e => e is ToggleSwitch));
+            Expect(S.ScrollToOpen == before, "clicking it again changes it back");
+            Island.FinishOnboarding();
+            await Task.Delay(800);
+
+            // The auto-pause offer, and its switch.
+            app.DemoAutoPauseOffer();
+            await Shot("05d-autopause-offer", settle: 900);
+            await Click(Find(e => e is ToggleSwitch));
+            Expect(!S.AutoPauseOthers, "the offer's switch turns auto-pause off");
+            await Shot("05e-autopause-confirmed", settle: 500);
+            await Task.Delay(2600);
+            Expect(!Island.HasNotice, "the offer closes itself after confirming");
+            SettingsStore.Update(x => x.AutoPauseOthers = true);
+            MediaService.Shared.Inject(new MediaInfo());
+            SetCursorPos(8, (int)(SystemParameters.PrimaryScreenHeight * VisualTreeHelper.GetDpi(Island).DpiScaleY) - 8);
+            await Task.Delay(900);
+        }
+
+        private void Expect(bool ok, string what)
+        {
+            Note((ok ? "PASS " : "FAIL ") + what);
+            if (!ok) failed = true;
+        }
+
+        private FrameworkElement Find(Func<FrameworkElement, bool> match)
+        {
+            FrameworkElement Walk(DependencyObject d)
+            {
+                if (d is FrameworkElement fe && fe.IsVisible && match(fe)) return fe;
+                int n = VisualTreeHelper.GetChildrenCount(d);
+                for (int i = 0; i < n; i++) { var r = Walk(VisualTreeHelper.GetChild(d, i)); if (r != null) return r; }
+                return null;
+            }
+            return Walk(Island);
+        }
+
+        private async Task Click(FrameworkElement target, Point? at = null)
+        {
+            if (target == null) { Note("click target not found"); return; }
+            var p = target.PointToScreen(at ?? new Point(target.ActualWidth / 2, target.ActualHeight / 2));
+            SetCursorPos((int)p.X, (int)p.Y);
+            await Task.Delay(250);
+            mouse_event(0x0002, 0, 0, 0, IntPtr.Zero);
+            await Task.Delay(70);
+            mouse_event(0x0004, 0, 0, 0, IntPtr.Zero);
+            await Task.Delay(700);
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern void mouse_event(uint flags, int dx, int dy, int data, IntPtr extra);
 
         // MARK: Capture
 

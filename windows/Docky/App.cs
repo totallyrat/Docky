@@ -91,6 +91,9 @@ namespace Docky
                 "Restart Docky to update. It only takes a second.", "Restart", InstallUpdateNow, G.Download);
             Updater.Shared.Start();
 
+            // Auto-pause keeps getting undone: offer to switch it off (at most once a week).
+            MediaService.Shared.AutoPauseOverridden += OfferToStopAutoPause;
+
             if (S.PlayIntro) Intro.Play(Island, AfterIntro);
             else AfterIntro();
         }
@@ -222,6 +225,28 @@ namespace Docky
             };
             previewTimer.Start();
         }
+
+        private void OfferToStopAutoPause()
+        {
+            if (!S.AutoPauseOthers || Island.HasNotice) return;
+            if (S.AutoPauseOfferDismissedAt is DateTime last && (DateTime.Now - last).TotalDays < 7) return;
+            Island.ShowToggleNotice("autopause", "Hey, it's me pausing your content", "Want me to turn that feature off for you?",
+                "Auto-pause", () => S.AutoPauseOthers,
+                on =>
+                {
+                    SettingsStore.Update(x => x.AutoPauseOthers = on);
+                    if (on) return;
+                    Island.UpdateNoticeMessage("Done! I'll leave your media alone. You can turn it back on in Settings.");
+                    var close = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.4) };
+                    close.Tick += (_, _) => { close.Stop(); if (Island.NoticeToggleLabel != null) Island.ResolveNotice(true); };
+                    close.Start();
+                },
+                G.Wave,
+                () => SettingsStore.Update(x => x.AutoPauseOfferDismissedAt = DateTime.Now));
+        }
+
+        /// <summary>For the demo: show the auto-pause offer without waiting for it to happen.</summary>
+        public void DemoAutoPauseOffer() => OfferToStopAutoPause();
 
         private void CheckForUpdates()
         {
