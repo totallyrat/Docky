@@ -191,6 +191,20 @@ namespace Docky.Shell
             CompositionTarget.Rendering -= Count;
             Note($"intro (no captures): {frames} frames in {sw.Elapsed.TotalSeconds:0.0}s = {frames / sw.Elapsed.TotalSeconds:0} fps (lite {app.Intro.Lite})");
 
+            // Baseline: the island's own morph (a single small window) on this machine.
+            frames = 0;
+            CompositionTarget.Rendering += Count;
+            sw.Restart();
+            for (int i = 0; i < 3; i++)
+            {
+                Island.Expand(Tab.Timers);
+                await Task.Delay(700);
+                Island.Collapse();
+                await Task.Delay(700);
+            }
+            CompositionTarget.Rendering -= Count;
+            Note($"island morph: {frames / sw.Elapsed.TotalSeconds:0} frames/s");
+
             frames = 0;
             app.Glow.Show();
             await Task.Delay(1800);
