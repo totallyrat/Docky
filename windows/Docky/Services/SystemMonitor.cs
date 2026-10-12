@@ -90,7 +90,7 @@ namespace Docky.Services
 
             // Focus assist / Do not disturb
             var profile = FocusProfile();
-            if (profile != null && lastFocusProfile != null && profile != lastFocusProfile && s.HudFocus)
+            if (profile != null && lastFocusProfile != null && profile != lastFocusProfile && s.HudFocus && WarmedUp)
             {
                 bool on = profile > 0;
                 string name = profile == 2 ? "Alarms only" : "Do not disturb";

@@ -363,6 +363,8 @@ namespace Docky.Island
         private readonly TextBlock a, b;
         private readonly TranslateTransform move = new();
         private const double Gap = 36;
+        /// <summary>Short text sits in the middle (compact island) or at the start (lists).</summary>
+        public bool Centered { get; set; } = true;
 
         public Marquee(string text, double size, FontWeight weight, Brush brush)
         {
@@ -387,7 +389,7 @@ namespace Docky.Island
             if (w <= ActualWidth + 0.5 || ActualWidth <= 0)
             {
                 b.Visibility = Visibility.Collapsed;
-                move.X = Math.Max(0, (ActualWidth - w) / 2);
+                move.X = Centered ? Math.Max(0, (ActualWidth - w) / 2) : 0;
                 return;
             }
             b.Visibility = Visibility.Visible;

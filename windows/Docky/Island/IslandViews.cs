@@ -31,7 +31,7 @@ namespace Docky.Island
             {
                 case Tab.NowPlaying: return 150;
                 case Tab.Timers:
-                    if (w.TimersMode == "pomodoro") return 38 + (clock.Session == null ? 112 : 70);
+                    if (w.TimersMode == "pomodoro") return 38 + (clock.Session == null ? 132 : 70);
                     if (clock.Timers.Count == 0 || TimerComposerOpen) return 38 + 118;
                     return 38 + Math.Min(clock.Timers.Count, 3) * 58 + 34;
                 case Tab.Clipboard: return 136;
@@ -57,8 +57,10 @@ namespace Docky.Island
                 Pres.OnboardingDemo => OnboardingDemo(w),
                 _ => new Grid(),
             };
-            view.Width = size.Width;
-            view.Height = size.Height;
+            // The view's margin is its inset from the island's edge, so it sizes to what's left.
+            var m = view.Margin;
+            view.Width = Math.Max(0, size.Width - m.Left - m.Right);
+            view.Height = Math.Max(0, size.Height - m.Top - m.Bottom);
             return view;
         }
 
@@ -172,7 +174,7 @@ namespace Docky.Island
             art.VerticalAlignment = VerticalAlignment.Center;
             g.Children.Add(art);
             var texts = new StackPanel { Margin = new Thickness(12, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
-            texts.Children.Add(new Marquee(m?.Title ?? "", 14, FontWeights.SemiBold, Brushes.White) { Height = 19 });
+            texts.Children.Add(new Marquee(m?.Title ?? "", 14, FontWeights.SemiBold, Brushes.White) { Height = 19, Centered = false });
             texts.Children.Add(Theme.Text(m?.Artist ?? "", 12, FontWeights.Normal, Theme.White(0.55)));
             Grid.SetColumn(texts, 1);
             g.Children.Add(texts);
@@ -373,7 +375,7 @@ namespace Docky.Island
             top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             top.Children.Add(UI.Artwork(m.Artwork, 62, 14));
             var texts = new StackPanel { Margin = new Thickness(14, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-            texts.Children.Add(new Marquee(m.Title, 15, FontWeights.SemiBold, Brushes.White) { Height = 21 });
+            texts.Children.Add(new Marquee(m.Title, 15, FontWeights.SemiBold, Brushes.White) { Height = 21, Centered = false });
             texts.Children.Add(Theme.Text(m.Artist.Length > 0 ? m.Artist : m.AppName, 13, FontWeights.Normal, Theme.White(0.55)));
             var app = Theme.Text(m.AppName, 10.5, FontWeights.SemiBold, Theme.White(0.35));
             app.Margin = new Thickness(0, 3, 0, 0);

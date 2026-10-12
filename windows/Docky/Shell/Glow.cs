@@ -95,6 +95,49 @@ namespace Docky.Shell
             return 0.5 * (Erf((width / 2 - d) / s) - Erf((-width / 2 - d) / s));
         }
 
+        /// <summary>Three box-blur passes (close to a Gaussian) over a single channel, in place.</summary>
+        public static void Blur(float[] a, int w, int h, int radius)
+        {
+            if (radius < 1) return;
+            var tmp = new float[a.Length];
+            for (int pass = 0; pass < 3; pass++)
+            {
+                BoxH(a, tmp, w, h, radius);
+                BoxV(tmp, a, w, h, radius);
+            }
+        }
+
+        private static void BoxH(float[] src, float[] dst, int w, int h, int r)
+        {
+            float norm = 1f / (2 * r + 1);
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                float sum = 0;
+                for (int x = -r; x <= r; x++) sum += src[row + Math.Clamp(x, 0, w - 1)];
+                for (int x = 0; x < w; x++)
+                {
+                    dst[row + x] = sum * norm;
+                    sum += src[row + Math.Min(w - 1, x + r + 1)] - src[row + Math.Max(0, x - r)];
+                }
+            }
+        }
+
+        private static void BoxV(float[] src, float[] dst, int w, int h, int r)
+        {
+            float norm = 1f / (2 * r + 1);
+            for (int x = 0; x < w; x++)
+            {
+                float sum = 0;
+                for (int y = -r; y <= r; y++) sum += src[Math.Clamp(y, 0, h - 1) * w + x];
+                for (int y = 0; y < h; y++)
+                {
+                    dst[y * w + x] = sum * norm;
+                    sum += src[Math.Min(h - 1, y + r + 1) * w + x] - src[Math.Max(0, y - r) * w + x];
+                }
+            }
+        }
+
         /// <summary>The island's outline glow: signed distance to a rounded rectangle.</summary>
         public static BitmapSource IslandMask(Size island, double radius, double pad, double scale)
         {
@@ -155,14 +198,17 @@ namespace Docky.Shell
             PH = Math.Max(8, (int)Math.Round(H * resolution));
             alpha = new float[PW * PH];
             if (trackPerimeter) along = new float[PW * PH];
+            double k = Math.Max(12, (width + 2 * blur) * 0.35);
             for (int py = 0; py < PH; py++)
                 for (int px = 0; px < PW; px++)
                 {
                     double x = (px + 0.5) / resolution, y = (py + 0.5) / resolution;
                     double dl = x, dr = W - x, dt = y, db = H - y;
                     double d = Math.Min(Math.Min(dl, dr), Math.Min(dt, db));
+                    // A soft minimum rounds the corners instead of leaving a hard diagonal crease.
+                    double soft = d - k * Math.Log(Math.Exp((d - dl) / k) + Math.Exp((d - dr) / k) + Math.Exp((d - dt) / k) + Math.Exp((d - db) / k));
                     int i = py * PW + px;
-                    alpha[i] = (float)(GlowKit.Band(d, width, blur) * strength);
+                    alpha[i] = (float)(GlowKit.Band(Math.Max(0, soft), width, blur) * strength);
                     if (along == null) continue;
                     // Distance along the border from the bottom centre, up either side, to the top centre.
                     double s;

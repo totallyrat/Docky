@@ -156,7 +156,7 @@ namespace Docky.Shell
                 case "Calendar": CalendarPage(stack); break;
                 default: About(stack); break;
             }
-            var scroll = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, PanningMode = PanningMode.VerticalOnly };
+            var scroll = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, PanningMode = PanningMode.VerticalOnly };
             content.Children.Clear();
             content.Children.Add(scroll);
             if (animate)

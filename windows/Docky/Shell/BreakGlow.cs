@@ -31,7 +31,7 @@ namespace Docky.Shell
                 return;
             }
             double W = SystemParameters.PrimaryScreenWidth, H = SystemParameters.PrimaryScreenHeight;
-            var wash = new EdgeMask(W, H, 200, 110, 0.12, tint: Color.FromRgb(255, 158, 107), strength: 0.2);
+            var wash = new EdgeMask(W, H, 200, 110, 0.12, tint: Color.FromRgb(255, 158, 107), strength: 0.16);
             var outer = new EdgeMask(W, H, 150, 80, 0.16);
             var inner = new EdgeMask(W, H, 44, 24, 0.3);
             var conic = GlowKit.Conic(GlowKit.Warm);
@@ -54,8 +54,8 @@ namespace Docky.Shell
                 Canvas.SetTop(washImage, -region.Y);
                 washHolder.Children.Add(washImage);
                 breather.Children.Add(washHolder);
-                spins.Add(pane.AddMaskedConic(breather, conic, outer.Bitmap, W, H, 0.72).spin);
-                spins.Add(pane.AddMaskedConic(breather, conic, inner.Bitmap, W, H, 0.6).spin);
+                spins.Add(pane.AddMaskedConic(breather, conic, outer.Bitmap, W, H, 0.62).spin);
+                spins.Add(pane.AddMaskedConic(breather, conic, inner.Bitmap, W, H, 0.45).spin);
                 fader.Children.Add(breather);
                 pane.Root.Children.Add(fader);
                 panes.Add(pane);

@@ -6,7 +6,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using Docky.Core;
 using Docky.Island;
@@ -105,7 +104,7 @@ namespace Docky.Shell
         private double W, H;
         private readonly List<Pane> panes = new();
         private EdgeMask bloom, core;
-        private BitmapSource conic, headSprite, flashSprite, wordFull, wordFace, islandMask;
+        private BitmapSource conic, headSprite, flashSprite, wordBloom, wordFace, islandMask;
         private BitmapSource[] sparkSprites;
         private Size wordSize;
         private double wordFont;
@@ -145,7 +144,7 @@ namespace Docky.Shell
             flashSprite = GlowKit.Radial(280, Color.FromArgb(235, 255, 255, 255), Color.FromArgb(128, 168, 107, 255), Color.FromArgb(0, 168, 107, 255));
             sparkSprites = GlowKit.Intro.Select(c => GlowKit.Radial(32, Colors.White, Color.FromArgb(170, c.R, c.G, c.B), Color.FromArgb(0, c.R, c.G, c.B))).ToArray();
             wordFont = Math.Clamp(W * 0.07, 72, 124);
-            (wordFull, wordFace, wordSize) = Wordmark(wordFont);
+            (wordBloom, wordFace, wordSize) = Wordmark(wordFont);
             shineBrush = new LinearGradientBrush(new GradientStopCollection
             {
                 new(Color.FromArgb(0, 255, 255, 255), 0), new(Color.FromArgb(242, 255, 255, 255), 0.5), new(Color.FromArgb(0, 255, 255, 255), 1),
@@ -483,7 +482,8 @@ namespace Docky.Shell
                 if (wr.IntersectsWith(region))
                 {
                     dc.PushOpacity(wordOpacity);
-                    dc.DrawImage(wordFull, wr);
+                    dc.DrawImage(wordBloom, wr);
+                    dc.DrawImage(wordFace, wr);
                     if (!double.IsNaN(shineX))
                     {
                         double s = wordScale, u = wordFont / 120;
@@ -500,8 +500,9 @@ namespace Docky.Shell
             }
         }
 
-        /// <summary>"Docky" in heavy type with a coloured bloom, plus the plain letters for the shine mask.</summary>
-        private static (BitmapSource full, BitmapSource face, Size size) Wordmark(double fontSize)
+        /// <summary>"Docky" in heavy type: a coloured bloom (blurred on the CPU at low resolution,
+        /// which is far quicker than a WPF blur effect) and the letters themselves.</summary>
+        private static (BitmapSource bloom, BitmapSource face, Size size) Wordmark(double fontSize)
         {
             var typeface = new Typeface(new FontFamily("Segoe UI Variable Display, Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
             var text = new FormattedText("Docky", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, fontSize, Brushes.White, 1.0);
@@ -509,21 +510,48 @@ namespace Docky.Shell
             var size = new Size(Math.Ceiling(text.WidthIncludingTrailingWhitespace + pad * 2), Math.Ceiling(text.Height + pad * 2));
             var geometry = text.BuildGeometry(new Point(pad, pad));
             geometry.Freeze();
-            const double scale = 2;
-            int pw = (int)(size.Width * scale), ph = (int)(size.Height * scale);
             double u = fontSize / 120;
 
-            var full = new RenderTargetBitmap(pw, ph, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            // Bloom: the letters' coverage at quarter resolution, blurred three times with different radii.
+            const double low = 0.25;
+            int lw = (int)Math.Ceiling(size.Width * low), lh = (int)Math.Ceiling(size.Height * low);
+            var shape = new DrawingVisual();
+            using (var dc = shape.RenderOpen()) dc.DrawGeometry(Brushes.White, null, geometry);
+            var coverage = new RenderTargetBitmap(lw, lh, 96 * low, 96 * low, PixelFormats.Pbgra32);
+            coverage.Render(shape);
+            var px = new byte[lw * lh * 4];
+            coverage.CopyPixels(px, lw * 4, 0);
+            var baseAlpha = new float[lw * lh];
+            for (int i = 0; i < baseAlpha.Length; i++) baseAlpha[i] = px[i * 4 + 3] / 255f;
+            double[] r = new double[baseAlpha.Length], g = new double[baseAlpha.Length], b = new double[baseAlpha.Length], a = new double[baseAlpha.Length];
             foreach (var (color, radius) in new[] { (GlowKit.Intro[0], 80.0), (GlowKit.Intro[2], 44.0), (GlowKit.Intro[1], 20.0) })
             {
-                var dv = new DrawingVisual { Effect = new BlurEffect { Radius = radius * u, KernelType = KernelType.Gaussian } };
-                using (var dc = dv.RenderOpen())
+                var layer = (float[])baseAlpha.Clone();
+                GlowKit.Blur(layer, lw, lh, Math.Max(1, (int)Math.Round(radius * u * low * 0.55)));
+                for (int i = 0; i < layer.Length; i++)
                 {
-                    dc.DrawRectangle(Brushes.Transparent, null, new Rect(size));
-                    dc.DrawGeometry(Theme.Brush(color, 0.8), null, geometry);
+                    double v = Math.Min(1, layer[i] * 1.6) * 0.8;
+                    // "Screen" the layers together so overlaps brighten without clipping harshly.
+                    r[i] = 1 - (1 - r[i]) * (1 - color.R / 255.0 * v);
+                    g[i] = 1 - (1 - g[i]) * (1 - color.G / 255.0 * v);
+                    b[i] = 1 - (1 - b[i]) * (1 - color.B / 255.0 * v);
+                    a[i] = 1 - (1 - a[i]) * (1 - v);
                 }
-                full.Render(dv);
             }
+            var out_ = new byte[lw * lh * 4];
+            for (int i = 0; i < a.Length; i++)
+            {
+                double alpha = a[i];
+                out_[i * 4] = (byte)(Math.Min(alpha, b[i]) * 255);
+                out_[i * 4 + 1] = (byte)(Math.Min(alpha, g[i]) * 255);
+                out_[i * 4 + 2] = (byte)(Math.Min(alpha, r[i]) * 255);
+                out_[i * 4 + 3] = (byte)(alpha * 255);
+            }
+            var bloom = BitmapSource.Create(lw, lh, 96 * low, 96 * low, PixelFormats.Pbgra32, null, out_, lw * 4);
+            bloom.Freeze();
+
+            // Face: crisp letters with a soft vertical tint, at 2x.
+            const double scale = 2;
             var faceBrush = new LinearGradientBrush(new GradientStopCollection
             {
                 new(Colors.White, 0), new(Color.FromRgb(235, 230, 255), 0.6), new(Color.FromRgb(255, 219, 242), 1),
@@ -534,12 +562,10 @@ namespace Docky.Shell
                 dc.DrawRectangle(Brushes.Transparent, null, new Rect(size));
                 dc.DrawGeometry(faceBrush, null, geometry);
             }
-            full.Render(face);
-            full.Freeze();
-            var faceOnly = new RenderTargetBitmap(pw, ph, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
-            faceOnly.Render(face);
-            faceOnly.Freeze();
-            return (full, faceOnly, size);
+            var faceBitmap = new RenderTargetBitmap((int)(size.Width * scale), (int)(size.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            faceBitmap.Render(face);
+            faceBitmap.Freeze();
+            return (bloom, faceBitmap, size);
         }
     }
 }

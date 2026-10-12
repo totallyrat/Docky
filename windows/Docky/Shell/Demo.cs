@@ -169,6 +169,8 @@ namespace Docky.Shell
             var sw = Stopwatch.StartNew();
             bool introDone = false;
             app.Intro.Play(Island, () => introDone = true);
+            Note($"intro setup took {sw.Elapsed.TotalMilliseconds:0} ms");
+            sw.Restart();
             foreach (var at in new[] { 0.3, 0.6, 0.9, 1.2, 1.6, 2.3, 3.2, 5.4 })
             {
                 double wait = at * 1000 - sw.Elapsed.TotalMilliseconds;
